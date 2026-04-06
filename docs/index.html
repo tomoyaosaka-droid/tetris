@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tetris — Architecture Document</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:#0d0d1a;color:#cdd;
+    font-family:'Courier New',monospace;
+    line-height:1.75;
+    padding:0 0 60px;
+  }
+  header{
+    background:#0a0a14;border-bottom:1px solid #1f2f4d;
+    padding:28px 40px 22px;
+  }
+  header h1{
+    font-size:1.9rem;letter-spacing:.35em;color:#e94560;
+    text-shadow:0 0 18px rgba(233,69,96,.6);
+  }
+  header p{color:#4a6080;font-size:.85rem;margin-top:6px;letter-spacing:.08em}
+  .toc{
+    background:#0f1420;border:1px solid #1f2f4d;border-radius:8px;
+    padding:20px 28px;margin:36px auto;max-width:860px;
+  }
+  .toc h2{color:#e94560;font-size:.9rem;letter-spacing:.2em;margin-bottom:12px}
+  .toc ol{padding-left:20px}
+  .toc li{margin:4px 0}
+  .toc a{color:#4a90d9;text-decoration:none;font-size:.88rem}
+  .toc a:hover{color:#7ab8f5}
+  section{max-width:860px;margin:48px auto;padding:0 24px}
+  h2{
+    color:#e94560;font-size:1.1rem;letter-spacing:.25em;
+    border-bottom:1px solid #1f2f4d;padding-bottom:10px;margin-bottom:24px;
+  }
+  h3{color:#7ab8f5;font-size:.95rem;letter-spacing:.1em;margin:28px 0 12px}
+  p{font-size:.88rem;color:#8a9ab0;margin-bottom:12px}
+  .diagram{
+    background:#090912;border:1px solid #1f2f4d;border-radius:8px;
+    padding:24px;margin:20px 0;overflow-x:auto;
+  }
+  .diagram .mermaid{display:flex;justify-content:center}
+  table{width:100%;border-collapse:collapse;font-size:.82rem;margin:12px 0}
+  th{background:#111827;color:#7ab8f5;padding:8px 12px;text-align:left;border:1px solid #1f2f4d;letter-spacing:.07em}
+  td{padding:8px 12px;border:1px solid #1a2540;color:#9aaabb}
+  tr:nth-child(even) td{background:#0a0f1c}
+  code{
+    background:#111827;color:#e94560;padding:1px 6px;
+    border-radius:3px;font-size:.83rem;font-family:'Courier New',monospace;
+  }
+  .badge{
+    display:inline-block;background:#1f2f4d;color:#7ab8f5;
+    border-radius:4px;padding:1px 8px;font-size:.75rem;margin:2px;
+  }
+  .url-box{
+    background:#090912;border:1px solid #1f2f4d;border-radius:6px;
+    padding:14px 20px;font-size:.85rem;color:#4a90d9;margin:12px 0;
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>TETRIS</h1>
+  <p>Architecture &amp; Specification Document &nbsp;|&nbsp; Single-file browser Tetris</p>
+</header>
+
+<nav class="toc">
+  <h2>TABLE OF CONTENTS</h2>
+  <ol>
+    <li><a href="#overview">システム概要</a></li>
+    <li><a href="#stack">技術スタック</a></li>
+    <li><a href="#classes">クラス構成</a></li>
+    <li><a href="#gameloop">ゲームループ</a></li>
+    <li><a href="#state">ゲーム状態機械</a></li>
+    <li><a href="#rotation">SRS 回転システム</a></li>
+    <li><a href="#scoring">スコアリング</a></li>
+    <li><a href="#input">入力システム (DAS)</a></li>
+    <li><a href="#rendering">レンダリング</a></li>
+    <li><a href="#constants">主要定数</a></li>
+  </ol>
+</nav>
+
+<!-- 1. Overview -->
+<section id="overview">
+  <h2>1. システム概要</h2>
+  <p>
+    依存ライブラリなし・ビルドステップなしの単一ファイル (<code>tetris.html</code>) で動作するブラウザ Tetris。
+    HTML / CSS / JavaScript のみで構成され、Canvas 2D API を用いて描画する。
+  </p>
+  <div class="url-box">
+    公開 URL: <a href="https://practice-day1-osaka.web.app" target="_blank">https://practice-day1-osaka.web.app</a>
+    &nbsp;|&nbsp;
+    GitHub: <a href="https://github.com/tomoyaosaka-droid/tetris" target="_blank">tomoyaosaka-droid/tetris</a>
+  </div>
+  <div class="diagram">
+    <div class="mermaid">
+graph TB
+  subgraph Browser
+    HTML[tetris.html]
+    subgraph JavaScript
+      Bag
+      Piece
+      Board
+      Game
+      render["render()"]
+      Input["Input Handler"]
+    end
+    subgraph Canvas2D
+      BC["board canvas"]
+      HC["hold canvas"]
+      NC["next canvas"]
+    end
+  end
+  HTML --> JavaScript
+  HTML --> Canvas2D
+  Game --> Board
+  Game --> Bag
+  Game --> Piece
+  render --> BC
+  render --> HC
+  render --> NC
+  Input --> Game
+    </div>
+  </div>
+</section>
+
+<!-- 2. Stack -->
+<section id="stack">
+  <h2>2. 技術スタック</h2>
+  <table>
+    <tr><th>レイヤー</th><th>技術</th><th>備考</th></tr>
+    <tr><td>マークアップ</td><td>HTML5</td><td>インライン CSS / JS を含む単一ファイル</td></tr>
+    <tr><td>スタイル</td><td>CSS3</td><td>Flexbox レイアウト、メディアクエリでレスポンシブ対応</td></tr>
+    <tr><td>ロジック</td><td>Vanilla JS (ES2020)</td><td>クラス構文、<code>requestAnimationFrame</code> ループ</td></tr>
+    <tr><td>描画</td><td>Canvas 2D API</td><td>ボード・ホールド・Next キューそれぞれ専用 Canvas</td></tr>
+    <tr><td>ホスティング</td><td>Firebase Hosting</td><td>GCP プロジェクト <code>practice-day1-osaka</code></td></tr>
+  </table>
+</section>
+
+<!-- 3. Classes -->
+<section id="classes">
+  <h2>3. クラス構成</h2>
+  <div class="diagram">
+    <div class="mermaid">
+classDiagram
+  class Bag {
+    -_b: string[]
+    +next(): string
+  }
+  class Piece {
+    +type: string
+    +x: number
+    +y: number
+    +rot: number
+    +shape: number[][]
+    +color: string
+    +cells(): [number,number][]
+    +clone(): Piece
+  }
+  class Board {
+    +g: (string|null)[][]
+    +valid(p: Piece): boolean
+    +lock(p: Piece): void
+    +clearLines(): number
+  }
+  class Game {
+    +bag: Bag
+    +board: Board
+    +piece: Piece
+    +queue: string[]
+    +hold: string|null
+    +score: number
+    +level: number
+    +lines: number
+    +combo: number
+    +btb: boolean
+    +state: string
+    +update(dt: number): void
+    +move(dx,dy): boolean
+    +rotate(dir): boolean
+    +hardDrop(): void
+    +doHold(): void
+    -_spawn(): Piece
+    -_calcGhost(): number
+    -_lock(): void
+    -_score(n): void
+  }
+  Game "1" --> "1" Bag
+  Game "1" --> "1" Board
+  Game "1" --> "1" Piece : current
+  Game --> Piece : spawns
+    </div>
+  </div>
+
+  <h3>各クラスの責務</h3>
+  <table>
+    <tr><th>クラス</th><th>責務</th></tr>
+    <tr><td><code>Bag</code></td><td>7-bag ランダマイザー。Fisher-Yates シャッフルで 7 種を均等配布</td></tr>
+    <tr><td><code>Piece</code></td><td>ピースの型・位置・回転状態を保持。<code>cells()</code> でボード座標を返す</td></tr>
+    <tr><td><code>Board</code></td><td>20×10 グリッドの管理。衝突判定・固定・ライン消去</td></tr>
+    <tr><td><code>Game</code></td><td>ゲーム全状態・タイマー・DAS・スコアリングを統括する中心クラス</td></tr>
+    <tr><td><code>render()</code></td><td>スタンドアロン関数。Canvas 描画のみ担当（副作用なし）</td></tr>
+  </table>
+</section>
+
+<!-- 4. Game Loop -->
+<section id="gameloop">
+  <h2>4. ゲームループ</h2>
+  <p><code>requestAnimationFrame</code> を使ったフレームループ。毎フレーム <code>game.update(dt)</code> → <code>render(game)</code> を呼ぶ。</p>
+  <div class="diagram">
+    <div class="mermaid">
+flowchart TD
+  A([requestAnimationFrame]) --> B["dt = min(ts - last, 100ms)"]
+  B --> C["game.update(dt)"]
+  C --> D{state === running?}
+  D -- No --> E[skip]
+  D -- Yes --> F["flashTimer 更新"]
+  F --> G["DAS 処理\n(左右入力の連続移動)"]
+  G --> H["重力処理\n(gravTimer += dt)"]
+  H --> I{gravTimer >= speed?}
+  I -- Yes --> J["move(0,1)\n落下1マス"]
+  J --> K["onGround 判定"]
+  K --> L{on ground?}
+  L -- Yes --> M["lockTimer += dt"]
+  M --> N{lockTimer >= 500ms?}
+  N -- Yes --> O["_lock()\nピース固定"]
+  O --> P["clearLines()\nライン消去"]
+  P --> Q["_score(n)"]
+  Q --> R["_spawn()\n次ピース"]
+  E --> S["render(game)"]
+  R --> S
+  N -- No --> S
+  L -- No --> S
+  I -- No --> S
+  S --> A
+    </div>
+  </div>
+</section>
+
+<!-- 5. State Machine -->
+<section id="state">
+  <h2>5. ゲーム状態機械</h2>
+  <div class="diagram">
+    <div class="mermaid">
+stateDiagram-v2
+  [*] --> idle : 起動
+  idle --> running : SPACE / タップ
+  running --> paused : P / Esc
+  paused --> running : P / Esc / タップ
+  running --> over : ブロックがスポーン不可
+  over --> running : SPACE / タップ (new Game)
+    </div>
+  </div>
+  <table>
+    <tr><th>状態</th><th>説明</th></tr>
+    <tr><td><code>idle</code></td><td>起動直後のタイトル画面</td></tr>
+    <tr><td><code>running</code></td><td>プレイ中。<code>update(dt)</code> が全ロジックを実行</td></tr>
+    <tr><td><code>paused</code></td><td>一時停止中。<code>update(dt)</code> は即 return</td></tr>
+    <tr><td><code>over</code></td><td>ゲームオーバー。スコア表示し再スタート待ち</td></tr>
+  </table>
+</section>
+
+<!-- 6. SRS -->
+<section id="rotation">
+  <h2>6. SRS 回転システム</h2>
+  <p>
+    Super Rotation System (SRS) を実装。回転時に最大 5 つのウォールキックを順番に試み、
+    最初に有効な位置で回転を確定する。
+  </p>
+  <div class="diagram">
+    <div class="mermaid">
+flowchart LR
+  A["rotate(dir)"] --> B["from = piece.rot\nto = (from+dir+4)%4"]
+  B --> C["key = from>to\nkicks = KJ or KI"]
+  C --> D["kick[0] を試みる"]
+  D --> E{valid?}
+  E -- Yes --> F["回転確定\nghostY 更新"]
+  E -- No --> G{次の kick?}
+  G -- Yes --> D
+  G -- No --> H["回転失敗 (return false)"]
+    </div>
+  </div>
+  <p>
+    座標系注意: <code>KJ</code> / <code>KI</code> は <strong>スクリーン座標 (y-down)</strong>。
+    TetrisWiki の y-up 表記から y 成分を符号反転して定義している。
+  </p>
+  <table>
+    <tr><th>テーブル</th><th>対象ピース</th></tr>
+    <tr><td><code>KJ</code></td><td>J / L / S / Z / T (3×3 ピース)</td></tr>
+    <tr><td><code>KI</code></td><td>I ピース専用</td></tr>
+    <tr><td>(なし)</td><td>O ピース — キックなし <code>[[0,0]]</code></td></tr>
+  </table>
+</section>
+
+<!-- 7. Scoring -->
+<section id="scoring">
+  <h2>7. スコアリング</h2>
+  <div class="diagram">
+    <div class="mermaid">
+flowchart TD
+  A["ライン消去 n 本"] --> B["基本点 = LINE_PTS[n] × level"]
+  B --> C{n === 4 ?}
+  C -- Yes --> D{btb フラグ ON?}
+  D -- Yes --> E["pts × 1.5\n(Back-to-Back Tetris)"]
+  D -- No --> F["btb = true"]
+  C -- No --> G["btb = false"]
+  E --> H
+  F --> H
+  G --> H
+  H{combo > 0?} -- Yes --> I["pts += 50 × combo × level"]
+  H -- No --> J
+  I --> J["score += pts"]
+    </div>
+  </div>
+  <table>
+    <tr><th>消去ライン数</th><th>名称</th><th>基本点 (lv=1)</th></tr>
+    <tr><td>1</td><td>Single</td><td>100</td></tr>
+    <tr><td>2</td><td>Double</td><td>300</td></tr>
+    <tr><td>3</td><td>Triple</td><td>500</td></tr>
+    <tr><td>4</td><td>Tetris</td><td>800</td></tr>
+    <tr><td>—</td><td>Hard drop</td><td>2 pts/行</td></tr>
+    <tr><td>—</td><td>Soft drop</td><td>1 pt/行</td></tr>
+  </table>
+  <p>レベルは <code>Math.floor(lines / 10) + 1</code>（最大 20）。重力速度は <code>(0.8 - (lv-1)×0.007)^(lv-1) × 1000 ms</code>。</p>
+</section>
+
+<!-- 8. Input -->
+<section id="input">
+  <h2>8. 入力システム (DAS)</h2>
+  <p>Delayed Auto Shift (DAS) を実装。キーを押し続けると初回遅延後に連続移動する。</p>
+  <div class="diagram">
+    <div class="mermaid">
+sequenceDiagram
+  participant User
+  participant Input
+  participant Game
+  User->>Input: ArrowLeft keydown
+  Input->>Game: move(-1,0) (即時1回)
+  Input->>Game: dasL=true, dasLT=0
+  loop 毎フレーム (update内)
+    Game->>Game: dasLT += dt
+    alt dasLT > DAS_DELAY(167ms)
+      Game->>Game: reps = floor((dasLT - 167) / 33)
+      Game->>Game: move(-1,0) × reps
+    end
+  end
+  User->>Input: ArrowLeft keyup
+  Input->>Game: dasL=false
+    </div>
+  </div>
+  <table>
+    <tr><th>定数</th><th>値</th><th>説明</th></tr>
+    <tr><td><code>DAS_DELAY</code></td><td>167 ms</td><td>初回遅延（キー押下から連続移動開始まで）</td></tr>
+    <tr><td><code>DAS_RPT</code></td><td>33 ms</td><td>連続移動の間隔</td></tr>
+  </table>
+  <h3>キーバインド</h3>
+  <table>
+    <tr><th>キー</th><th>アクション</th></tr>
+    <tr><td>← →</td><td>左右移動 (DAS対応)</td></tr>
+    <tr><td>↓</td><td>ソフトドロップ</td></tr>
+    <tr><td>Space</td><td>ハードドロップ / スタート</td></tr>
+    <tr><td>↑ / X</td><td>時計回り回転</td></tr>
+    <tr><td>Z</td><td>反時計回り回転</td></tr>
+    <tr><td>C / Shift</td><td>ホールド</td></tr>
+    <tr><td>P / Esc</td><td>ポーズ</td></tr>
+  </table>
+</section>
+
+<!-- 9. Rendering -->
+<section id="rendering">
+  <h2>9. レンダリング</h2>
+  <p><code>render(game)</code> はゲーム状態を読み取り Canvas に描画する純粋な関数（副作用なし）。</p>
+  <div class="diagram">
+    <div class="mermaid">
+flowchart TD
+  R["render(game)"] --> B1["board canvas をクリア"]
+  B1 --> B2["グリッド線描画"]
+  B2 --> B3["固定ブロック描画\n(board.g)"]
+  B3 --> B4["ゴーストピース描画\n(透過+アウトライン)"]
+  B4 --> B5["アクティブピース描画"]
+  B5 --> H1["hold canvas 描画\n(canHold=false で暗く)"]
+  H1 --> N1["next canvas 描画\n(上位3ピース)"]
+  N1 --> S1["スコア/レベル/ライン\nDOM更新"]
+  S1 --> F1["フラッシュメッセージ\n(TETRIS! など)"]
+  F1 --> O1["オーバーレイ表示制御\n(idle/paused/over)"]
+    </div>
+  </div>
+  <table>
+    <tr><th>Canvas 要素</th><th>内容</th><th>サイズ</th></tr>
+    <tr><td><code>#board</code></td><td>メインボード・ゴースト・アクティブピース</td><td>BS×COLS × BS×ROWS (動的)</td></tr>
+    <tr><td><code>#hold-cv</code></td><td>ホールドピースプレビュー</td><td>88×78 px</td></tr>
+    <tr><td><code>#next-cv</code></td><td>Next キュー 3 ピース</td><td>88×264 px</td></tr>
+  </table>
+  <p>ブロックサイズ <code>BS</code> はウィンドウリサイズ時に動的に再計算され、最大 30px・最小 14px に収まる。</p>
+</section>
+
+<!-- 10. Constants -->
+<section id="constants">
+  <h2>10. 主要定数</h2>
+  <table>
+    <tr><th>定数</th><th>値</th><th>説明</th></tr>
+    <tr><td><code>COLS</code></td><td>10</td><td>ボード列数</td></tr>
+    <tr><td><code>ROWS</code></td><td>20</td><td>ボード行数</td></tr>
+    <tr><td><code>BS</code></td><td>14〜30 (動的)</td><td>ブロックサイズ (px)</td></tr>
+    <tr><td><code>LOCK_DELAY</code></td><td>500 ms</td><td>ピースが地面に触れてから固定されるまでの時間</td></tr>
+    <tr><td><code>MAX_LOCK_RESETS</code></td><td>15</td><td>ロックディレイのリセット上限回数</td></tr>
+    <tr><td><code>DAS_DELAY</code></td><td>167 ms</td><td>DAS 初回遅延</td></tr>
+    <tr><td><code>DAS_RPT</code></td><td>33 ms</td><td>DAS 連続移動間隔</td></tr>
+    <tr><td><code>LINE_PTS</code></td><td>[0,100,300,500,800]</td><td>1〜4 ライン消去の基本点</td></tr>
+  </table>
+  <h3>スポーン位置</h3>
+  <table>
+    <tr><th>ピース</th><th>x</th><th>y</th><th>備考</th></tr>
+    <tr><td>I</td><td>3</td><td>-1</td><td>shape の row1 がボード row0 に来る</td></tr>
+    <tr><td>その他</td><td>3</td><td>0</td><td></td></tr>
+  </table>
+  <h3>ピースカラー</h3>
+  <table>
+    <tr><th>ピース</th><th>カラー</th><th>プレビュー</th></tr>
+    <tr><td>I</td><td><code>#00f0f0</code></td><td><span class="badge" style="background:#00f0f0;color:#000">■</span></td></tr>
+    <tr><td>O</td><td><code>#f0f000</code></td><td><span class="badge" style="background:#f0f000;color:#000">■</span></td></tr>
+    <tr><td>T</td><td><code>#a000f0</code></td><td><span class="badge" style="background:#a000f0">■</span></td></tr>
+    <tr><td>S</td><td><code>#00f000</code></td><td><span class="badge" style="background:#00f000;color:#000">■</span></td></tr>
+    <tr><td>Z</td><td><code>#f00000</code></td><td><span class="badge" style="background:#f00000">■</span></td></tr>
+    <tr><td>J</td><td><code>#0050f0</code></td><td><span class="badge" style="background:#0050f0">■</span></td></tr>
+    <tr><td>L</td><td><code>#f0a000</code></td><td><span class="badge" style="background:#f0a000;color:#000">■</span></td></tr>
+  </table>
+</section>
+
+<script>
+  mermaid.initialize({
+    startOnLoad: true,
+    theme: 'dark',
+    themeVariables: {
+      darkMode: true,
+      background: '#090912',
+      primaryColor: '#1f2f4d',
+      primaryTextColor: '#cdd',
+      primaryBorderColor: '#4a6080',
+      lineColor: '#4a6080',
+      secondaryColor: '#111827',
+      tertiaryColor: '#0a0f1c',
+    }
+  });
+</script>
+</body>
+</html>
