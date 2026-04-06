@@ -91,9 +91,9 @@
     HTML / CSS / JavaScript のみで構成され、Canvas 2D API を用いて描画する。
   </p>
   <div class="url-box">
-    公開 URL: <a href="https://practice-day1-osaka.web.app" target="_blank">https://practice-day1-osaka.web.app</a>
-    &nbsp;|&nbsp;
-    GitHub: <a href="https://github.com/tomoyaosaka-droid/tetris" target="_blank">tomoyaosaka-droid/tetris</a>
+    ゲーム: <a href="https://practice-day1-osaka.web.app" target="_blank">https://practice-day1-osaka.web.app</a> (Firebase Hosting)<br>
+    仕様書: <a href="https://tomoyaosaka-droid.github.io/tetris/" target="_blank">https://tomoyaosaka-droid.github.io/tetris/</a> (GitHub Pages)<br>
+    GitHub: <a href="https://github.com/tomoyaosaka-droid/tetris" target="_blank">https://github.com/tomoyaosaka-droid/tetris</a>
   </div>
   <div class="diagram">
     <div class="mermaid">
@@ -136,8 +136,31 @@ graph TB
     <tr><td>スタイル</td><td>CSS3</td><td>Flexbox レイアウト、メディアクエリでレスポンシブ対応</td></tr>
     <tr><td>ロジック</td><td>Vanilla JS (ES2020)</td><td>クラス構文、<code>requestAnimationFrame</code> ループ</td></tr>
     <tr><td>描画</td><td>Canvas 2D API</td><td>ボード・ホールド・Next キューそれぞれ専用 Canvas</td></tr>
-    <tr><td>ホスティング</td><td>Firebase Hosting</td><td>GCP プロジェクト <code>practice-day1-osaka</code></td></tr>
+    <tr><td>ゲームホスティング</td><td>Firebase Hosting</td><td>GCP プロジェクト <code>practice-day1-osaka</code></td></tr>
+    <tr><td>ドキュメントホスティング</td><td>GitHub Pages</td><td><code>docs/</code> フォルダを main ブランチから配信</td></tr>
   </table>
+
+  <h3>ファイル構成</h3>
+  <table>
+    <tr><th>ファイル</th><th>説明</th></tr>
+    <tr><td><code>tetris.html</code></td><td>ゲーム本体（単一ファイル、依存なし）</td></tr>
+    <tr><td><code>public/index.html</code></td><td>Firebase Hosting 用エントリポイント（tetris.html と同内容）</td></tr>
+    <tr><td><code>public/tetris.html</code></td><td>Firebase Hosting 用（同上）</td></tr>
+    <tr><td><code>docs/index.html</code></td><td>本アーキテクチャ仕様書（GitHub Pages で公開）</td></tr>
+    <tr><td><code>firebase.json</code></td><td>Firebase Hosting 設定（public ディレクトリ指定）</td></tr>
+    <tr><td><code>.firebaserc</code></td><td>Firebase プロジェクト紐付け（practice-day1-osaka）</td></tr>
+    <tr><td><code>.gitignore</code></td><td>Firebase キャッシュ（<code>.firebase/</code>）を除外</td></tr>
+    <tr><td><code>CLAUDE.md</code></td><td>Claude Code 向けアーキテクチャガイド</td></tr>
+    <tr><td><code>README.md</code></td><td>機能・操作説明</td></tr>
+  </table>
+
+  <h3>デプロイ手順</h3>
+  <table>
+    <tr><th>対象</th><th>コマンド</th></tr>
+    <tr><td>ゲーム (Firebase)</td><td><code>firebase deploy --only hosting</code></td></tr>
+    <tr><td>仕様書 (GitHub Pages)</td><td><code>git push</code>（docs/ を更新して push するだけ）</td></tr>
+  </table>
+  <p>⚠️ <code>tetris.html</code> を修正した場合は <code>public/index.html</code> と <code>public/tetris.html</code> も同期すること。</p>
 </section>
 
 <!-- 3. Classes -->
