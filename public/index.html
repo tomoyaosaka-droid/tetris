@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
 <title>Tetris</title>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{
@@ -63,6 +65,29 @@ header{
   .side{width:68px}
   .box{padding:6px}
 }
+/* ── Ranking UI ──────────────────────────────────────────────────────────── */
+#ov-form{margin-top:14px;display:flex;flex-direction:column;align-items:center;gap:9px}
+#name-input{
+  background:#0a1020;border:1px solid #1f2f4d;border-radius:4px;
+  color:#eee;font-family:'Courier New',monospace;font-size:.9rem;
+  padding:7px 12px;text-align:center;width:160px;outline:none;letter-spacing:.05em;
+}
+#name-input:focus{border-color:#e94560;box-shadow:0 0 8px rgba(233,69,96,.3)}
+.ov-btn{
+  background:#e94560;border:none;border-radius:4px;color:#fff;
+  font-family:'Courier New',monospace;font-size:.72rem;letter-spacing:.12em;
+  padding:7px 20px;cursor:pointer;transition:background .15s;
+}
+.ov-btn:hover{background:#ff6080}
+.ov-btn.sec{background:#1a2840}.ov-btn.sec:hover{background:#243858}
+#ov-ranking{margin-top:8px;width:100%;display:flex;flex-direction:column;align-items:center}
+#rank-table{border-collapse:collapse;font-size:.68rem;width:100%;margin-bottom:10px}
+#rank-table th{color:#4a6080;font-weight:normal;padding:2px 6px;text-align:left;border-bottom:1px solid #1f2f4d}
+#rank-table td{padding:3px 6px;color:#aaa}
+.rank-1 td{color:#f0f000!important}
+.rank-2 td{color:#c0c0c0!important}
+.rank-3 td{color:#cd7f32!important}
+.rank-me td{color:#00f0f0!important;font-weight:bold}
 </style>
 </head>
 <body>
@@ -90,6 +115,21 @@ header{
         Z Rotate CCW &nbsp; ↓ Soft drop<br>
         SPACE Hard drop &nbsp; C / Shift Hold<br>
         P / Esc Pause
+      </div>
+      <div id="ov-form" style="display:none">
+        <div style="font-size:.7rem;color:#4a6080">Enter your name</div>
+        <input id="name-input" type="text" maxlength="10" placeholder="NAME" autocomplete="off">
+        <div style="display:flex;gap:8px">
+          <button class="ov-btn" id="btn-submit">SAVE SCORE</button>
+          <button class="ov-btn sec" id="btn-skip">SKIP</button>
+        </div>
+      </div>
+      <div id="ov-ranking" style="display:none">
+        <table id="rank-table">
+          <thead><tr><th>#</th><th>Name</th><th>Score</th><th>Lv</th></tr></thead>
+          <tbody id="rank-body"></tbody>
+        </table>
+        <button class="ov-btn" id="btn-again">PLAY AGAIN</button>
       </div>
     </div>
   </div>
@@ -368,6 +408,10 @@ const overlay=document.getElementById('overlay');
 const ovTitle=document.getElementById('ov-title');
 const ovSub=document.getElementById('ov-sub');
 const ovHints=overlay.querySelector('.hints');
+const ovForm=document.getElementById('ov-form');
+const ovRanking=document.getElementById('ov-ranking');
+const nameInput=document.getElementById('name-input');
+const rankBody=document.getElementById('rank-body');
 const flashEl=document.getElementById('flash');
 const elScore=document.getElementById('s-score');
 const elLevel=document.getElementById('s-level');
@@ -470,16 +514,20 @@ function render(g){
   if(g.state==='idle'){
     overlay.style.display='flex';
     ovTitle.textContent='TETRIS';ovSub.textContent='SPACE or tap to start';
-    ovHints.style.display='';
+    ovHints.style.display='';ovForm.style.display='none';ovRanking.style.display='none';
   } else if(g.state==='paused'){
     overlay.style.display='flex';
     ovTitle.textContent='PAUSED';ovSub.textContent='P to resume';
-    ovHints.style.display='none';
+    ovHints.style.display='none';ovForm.style.display='none';ovRanking.style.display='none';
   } else if(g.state==='over'){
     overlay.style.display='flex';
-    ovTitle.textContent='GAME OVER';
-    ovSub.textContent='Score: '+g.score.toLocaleString()+' — SPACE to restart';
-    ovHints.style.display='none';
+    ovTitle.textContent='GAME OVER';ovSub.textContent='Score: '+g.score.toLocaleString();
+    ovHints.style.display='none';ovForm.style.display='flex';ovRanking.style.display='none';
+    if(!nameInput.dataset.focused){nameInput.dataset.focused='1';setTimeout(()=>nameInput.focus(),50)}
+  } else if(g.state==='ranking'){
+    overlay.style.display='flex';
+    ovTitle.textContent='RANKING';ovSub.textContent='';
+    ovHints.style.display='none';ovForm.style.display='none';ovRanking.style.display='flex';
   } else {
     overlay.style.display='none';
   }
@@ -500,7 +548,9 @@ function doAction(a){
 }
 
 function startOrRestart(){
-  if(game.state==='over') Object.assign(game,new Game());
+  nameInput.dataset.focused='';
+  nameInput.value='';
+  if(game.state==='over'||game.state==='ranking') Object.assign(game,new Game());
   game.state='running';
 }
 
@@ -508,8 +558,9 @@ document.addEventListener('keydown',e=>{
   switch(e.code){
     case 'Space':
       e.preventDefault();
-      if(game.state==='idle'||game.state==='over') startOrRestart();
+      if(game.state==='idle'||game.state==='ranking') startOrRestart();
       else if(game.state==='running') game.hardDrop();
+      else if(game.state==='over') nameInput.focus();
       break;
     case 'KeyP': case 'Escape':
       if(game.state==='running') game.state='paused';
@@ -561,10 +612,94 @@ document.querySelectorAll('.tbtn').forEach(btn=>{
 });
 
 // Click overlay to start
-overlay.addEventListener('click',()=>{
-  if(game.state==='idle'||game.state==='over') startOrRestart();
+overlay.addEventListener('click',e=>{
+  if(e.target.closest('#ov-form')||e.target.closest('#ov-ranking')) return;
+  if(game.state==='idle') startOrRestart();
   else if(game.state==='paused') game.state='running';
+  else if(game.state==='over') nameInput.focus();
+  else if(game.state==='ranking') startOrRestart();
 });
+
+// ── Firebase / Firestore ──────────────────────────────────────────────────────
+// Firebase コンソール → プロジェクト設定 → マイアプリ → SDK の設定と構成 から取得
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyAumR72X9tYPNWSYXjw9Qe9XNSDhPyQtrM",
+  authDomain:        "practice-day1-osaka.firebaseapp.com",
+  projectId:         "practice-day1-osaka",
+  storageBucket:     "practice-day1-osaka.firebasestorage.app",
+  messagingSenderId: "609717553383",
+  appId:             "1:609717553383:web:005d27349d3f8a54697a42"
+};
+
+let db = null;
+try {
+  firebase.initializeApp(FIREBASE_CONFIG);
+  db = firebase.firestore();
+} catch(e) { console.warn('Firebase init failed:', e) }
+
+async function saveScore(name, score, level, lines) {
+  if(!db) throw new Error('DB not initialized');
+  return db.collection('scores').add({
+    name: name||'ANONYMOUS', score, level, lines,
+    date: firebase.firestore.FieldValue.serverTimestamp()
+  });
+}
+
+async function loadRanking() {
+  if(!db) return [];
+  const snap = await db.collection('scores').orderBy('score','desc').limit(10).get();
+  return snap.docs.map(d=>({id:d.id,...d.data()}));
+}
+
+async function showRanking(myName, myScore) {
+  rankBody.innerHTML='<tr><td colspan="4" style="color:#4a6080;text-align:center;padding:8px">Loading...</td></tr>';
+  try {
+    const rows = await loadRanking();
+    rankBody.innerHTML='';
+    if(!rows.length){
+      rankBody.innerHTML='<tr><td colspan="4" style="color:#4a6080;text-align:center;padding:8px">No scores yet</td></tr>';
+      return;
+    }
+    rows.forEach((r,i)=>{
+      const tr=document.createElement('tr');
+      const isMe=myName&&r.name===myName&&r.score===myScore;
+      if(isMe) tr.className='rank-me';
+      else if(i===0) tr.className='rank-1';
+      else if(i===1) tr.className='rank-2';
+      else if(i===2) tr.className='rank-3';
+      tr.innerHTML=`<td>${i+1}</td><td>${r.name}</td><td>${r.score.toLocaleString()}</td><td>${r.level}</td>`;
+      rankBody.appendChild(tr);
+    });
+  } catch(e) {
+    rankBody.innerHTML='<tr><td colspan="4" style="color:#e94560;text-align:center;padding:8px">Error loading ranking</td></tr>';
+  }
+}
+
+async function submitScore() {
+  const name=(nameInput.value.trim()||'ANONYMOUS').toUpperCase().slice(0,10);
+  const {score,level,lines}=game;
+  game.state='ranking';
+  try {
+    await saveScore(name, score, level, lines);
+    await showRanking(name, score);
+  } catch(e) {
+    await showRanking(null, null);
+  }
+}
+
+document.getElementById('btn-submit').addEventListener('click', submitScore);
+nameInput.addEventListener('keydown', e=>{
+  if(e.key==='Enter'){e.preventDefault();submitScore()}
+  e.stopPropagation(); // ゲームのキー操作に干渉させない
+});
+nameInput.addEventListener('keyup', e=>e.stopPropagation());
+
+document.getElementById('btn-skip').addEventListener('click', async ()=>{
+  game.state='ranking';
+  await showRanking(null, null);
+});
+
+document.getElementById('btn-again').addEventListener('click', startOrRestart);
 
 // ── Main Loop ─────────────────────────────────────────────────────────────────
 let game=new Game();
