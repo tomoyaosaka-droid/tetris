@@ -59,12 +59,19 @@
     background:#090912;border:1px solid #1f2f4d;border-radius:6px;
     padding:14px 20px;font-size:.85rem;color:#4a90d9;margin:12px 0;
   }
+  .url-box a{color:#4a90d9;text-decoration:none}
+  .url-box a:hover{color:#7ab8f5}
+  .new-badge{
+    display:inline-block;background:#e94560;color:#fff;
+    border-radius:3px;padding:1px 6px;font-size:.7rem;letter-spacing:.05em;
+    margin-left:8px;vertical-align:middle;
+  }
 </style>
 </head>
 <body>
 <header>
   <h1>TETRIS</h1>
-  <p>Architecture &amp; Specification Document &nbsp;|&nbsp; Single-file browser Tetris</p>
+  <p>Architecture &amp; Specification Document &nbsp;|&nbsp; Single-file browser Tetris + Firestore Leaderboard</p>
 </header>
 
 <nav class="toc">
@@ -79,6 +86,7 @@
     <li><a href="#scoring">スコアリング</a></li>
     <li><a href="#input">入力システム (DAS)</a></li>
     <li><a href="#rendering">レンダリング</a></li>
+    <li><a href="#firestore">Firestore ランキング <span class="new-badge">NEW</span></a></li>
     <li><a href="#constants">主要定数</a></li>
   </ol>
 </nav>
@@ -89,6 +97,7 @@
   <p>
     依存ライブラリなし・ビルドステップなしの単一ファイル (<code>tetris.html</code>) で動作するブラウザ Tetris。
     HTML / CSS / JavaScript のみで構成され、Canvas 2D API を用いて描画する。
+    ゲームオーバー時に Firebase Firestore へスコアを保存し、オンラインランキングを表示する。
   </p>
   <div class="url-box">
     ゲーム: <a href="https://practice-day1-osaka.web.app" target="_blank">https://practice-day1-osaka.web.app</a> (Firebase Hosting)<br>
@@ -98,31 +107,39 @@
   <div class="diagram">
     <div class="mermaid">
 graph TB
-  subgraph Browser
-    HTML[tetris.html]
-    subgraph JavaScript
+  subgraph Client["Browser (tetris.html)"]
+    subgraph JS["JavaScript"]
       Bag
       Piece
       Board
       Game
       render["render()"]
       Input["Input Handler"]
+      DB["Firestore SDK"]
     end
-    subgraph Canvas2D
+    subgraph Canvas["Canvas 2D"]
       BC["board canvas"]
       HC["hold canvas"]
       NC["next canvas"]
     end
+    subgraph UI["DOM Overlay"]
+      OV["overlay"]
+      FORM["name entry form"]
+      RANK["ranking table"]
+    end
   end
-  HTML --> JavaScript
-  HTML --> Canvas2D
-  Game --> Board
-  Game --> Bag
-  Game --> Piece
-  render --> BC
-  render --> HC
-  render --> NC
+  subgraph Firebase["Firebase (GCP)"]
+    HOST["Firebase Hosting"]
+    FS["Cloud Firestore\n(scores collection)"]
+  end
+  HOST -->|"serve tetris.html"| Client
+  Game --> Board & Bag & Piece
+  render --> BC & HC & NC
   Input --> Game
+  DB -->|"saveScore()"| FS
+  FS -->|"loadRanking()"| DB
+  DB --> RANK
+  Game -->|"state=over"| FORM
     </div>
   </div>
 </section>
@@ -134,10 +151,11 @@ graph TB
     <tr><th>レイヤー</th><th>技術</th><th>備考</th></tr>
     <tr><td>マークアップ</td><td>HTML5</td><td>インライン CSS / JS を含む単一ファイル</td></tr>
     <tr><td>スタイル</td><td>CSS3</td><td>Flexbox レイアウト、メディアクエリでレスポンシブ対応</td></tr>
-    <tr><td>ロジック</td><td>Vanilla JS (ES2020)</td><td>クラス構文、<code>requestAnimationFrame</code> ループ</td></tr>
+    <tr><td>ゲームロジック</td><td>Vanilla JS (ES2020)</td><td>クラス構文、<code>requestAnimationFrame</code> ループ</td></tr>
     <tr><td>描画</td><td>Canvas 2D API</td><td>ボード・ホールド・Next キューそれぞれ専用 Canvas</td></tr>
+    <tr><td>データベース</td><td>Firebase Firestore</td><td>CDN 経由で読み込み。スコア保存・ランキング取得</td></tr>
     <tr><td>ゲームホスティング</td><td>Firebase Hosting</td><td>GCP プロジェクト <code>practice-day1-osaka</code></td></tr>
-    <tr><td>ドキュメントホスティング</td><td>GitHub Pages</td><td><code>docs/</code> フォルダを main ブランチから配信</td></tr>
+    <tr><td>仕様書ホスティング</td><td>GitHub Pages</td><td><code>docs/</code> フォルダを main ブランチから配信</td></tr>
   </table>
 
   <h3>ファイル構成</h3>
@@ -147,17 +165,18 @@ graph TB
     <tr><td><code>public/index.html</code></td><td>Firebase Hosting 用エントリポイント（tetris.html と同内容）</td></tr>
     <tr><td><code>public/tetris.html</code></td><td>Firebase Hosting 用（同上）</td></tr>
     <tr><td><code>docs/index.html</code></td><td>本アーキテクチャ仕様書（GitHub Pages で公開）</td></tr>
-    <tr><td><code>firebase.json</code></td><td>Firebase Hosting 設定（public ディレクトリ指定）</td></tr>
+    <tr><td><code>firebase.json</code></td><td>Firebase Hosting + Firestore ルール設定</td></tr>
+    <tr><td><code>firestore.rules</code></td><td>Firestore セキュリティルール</td></tr>
     <tr><td><code>.firebaserc</code></td><td>Firebase プロジェクト紐付け（practice-day1-osaka）</td></tr>
     <tr><td><code>.gitignore</code></td><td>Firebase キャッシュ（<code>.firebase/</code>）を除外</td></tr>
     <tr><td><code>CLAUDE.md</code></td><td>Claude Code 向けアーキテクチャガイド</td></tr>
-    <tr><td><code>README.md</code></td><td>機能・操作説明</td></tr>
   </table>
 
   <h3>デプロイ手順</h3>
   <table>
     <tr><th>対象</th><th>コマンド</th></tr>
-    <tr><td>ゲーム (Firebase)</td><td><code>firebase deploy --only hosting</code></td></tr>
+    <tr><td>ゲーム + Firestore ルール (Firebase)</td><td><code>firebase deploy</code></td></tr>
+    <tr><td>ゲームのみ</td><td><code>firebase deploy --only hosting</code></td></tr>
     <tr><td>仕様書 (GitHub Pages)</td><td><code>git push</code>（docs/ を更新して push するだけ）</td></tr>
   </table>
   <p>⚠️ <code>tetris.html</code> を修正した場合は <code>public/index.html</code> と <code>public/tetris.html</code> も同期すること。</p>
@@ -220,12 +239,14 @@ classDiagram
 
   <h3>各クラスの責務</h3>
   <table>
-    <tr><th>クラス</th><th>責務</th></tr>
+    <tr><th>クラス / 関数</th><th>責務</th></tr>
     <tr><td><code>Bag</code></td><td>7-bag ランダマイザー。Fisher-Yates シャッフルで 7 種を均等配布</td></tr>
     <tr><td><code>Piece</code></td><td>ピースの型・位置・回転状態を保持。<code>cells()</code> でボード座標を返す</td></tr>
     <tr><td><code>Board</code></td><td>20×10 グリッドの管理。衝突判定・固定・ライン消去</td></tr>
     <tr><td><code>Game</code></td><td>ゲーム全状態・タイマー・DAS・スコアリングを統括する中心クラス</td></tr>
     <tr><td><code>render()</code></td><td>スタンドアロン関数。Canvas 描画のみ担当（副作用なし）</td></tr>
+    <tr><td><code>saveScore()</code></td><td>Firestore の <code>scores</code> コレクションにスコアを書き込む（async）</td></tr>
+    <tr><td><code>loadRanking()</code></td><td>Firestore から上位 10 件をスコア降順で取得する（async）</td></tr>
   </table>
 </section>
 
@@ -266,6 +287,7 @@ flowchart TD
 <!-- 5. State Machine -->
 <section id="state">
   <h2>5. ゲーム状態機械</h2>
+  <p>ゲームオーバー後は名前入力 → ランキング表示の 2 ステップを経由してから再スタートできる。</p>
   <div class="diagram">
     <div class="mermaid">
 stateDiagram-v2
@@ -274,15 +296,17 @@ stateDiagram-v2
   running --> paused : P / Esc
   paused --> running : P / Esc / タップ
   running --> over : ブロックがスポーン不可
-  over --> running : SPACE / タップ (new Game)
+  over --> ranking : SAVE SCORE または SKIP
+  ranking --> running : PLAY AGAIN / SPACE (new Game)
     </div>
   </div>
   <table>
-    <tr><th>状態</th><th>説明</th></tr>
-    <tr><td><code>idle</code></td><td>起動直後のタイトル画面</td></tr>
-    <tr><td><code>running</code></td><td>プレイ中。<code>update(dt)</code> が全ロジックを実行</td></tr>
-    <tr><td><code>paused</code></td><td>一時停止中。<code>update(dt)</code> は即 return</td></tr>
-    <tr><td><code>over</code></td><td>ゲームオーバー。スコア表示し再スタート待ち</td></tr>
+    <tr><th>状態</th><th>説明</th><th>overlay 表示</th></tr>
+    <tr><td><code>idle</code></td><td>起動直後のタイトル画面</td><td>タイトル + キー一覧</td></tr>
+    <tr><td><code>running</code></td><td>プレイ中。<code>update(dt)</code> が全ロジックを実行</td><td>非表示</td></tr>
+    <tr><td><code>paused</code></td><td>一時停止中。<code>update(dt)</code> は即 return</td><td>PAUSED</td></tr>
+    <tr><td><code>over</code></td><td>ゲームオーバー。名前入力フォームを表示</td><td>GAME OVER + 名前入力</td></tr>
+    <tr><td><code>ranking</code></td><td>Firestore から上位 10 件を取得して表示</td><td>RANKING + テーブル</td></tr>
   </table>
 </section>
 
@@ -384,11 +408,12 @@ sequenceDiagram
     <tr><th>キー</th><th>アクション</th></tr>
     <tr><td>← →</td><td>左右移動 (DAS対応)</td></tr>
     <tr><td>↓</td><td>ソフトドロップ</td></tr>
-    <tr><td>Space</td><td>ハードドロップ / スタート</td></tr>
+    <tr><td>Space</td><td>ハードドロップ / スタート / ランキングから再スタート</td></tr>
     <tr><td>↑ / X</td><td>時計回り回転</td></tr>
     <tr><td>Z</td><td>反時計回り回転</td></tr>
     <tr><td>C / Shift</td><td>ホールド</td></tr>
     <tr><td>P / Esc</td><td>ポーズ</td></tr>
+    <tr><td>Enter (名前入力中)</td><td>スコアを保存してランキングへ</td></tr>
   </table>
 </section>
 
@@ -406,9 +431,14 @@ flowchart TD
   B4 --> B5["アクティブピース描画"]
   B5 --> H1["hold canvas 描画\n(canHold=false で暗く)"]
   H1 --> N1["next canvas 描画\n(上位3ピース)"]
-  N1 --> S1["スコア/レベル/ライン\nDOM更新"]
+  N1 --> S1["スコア/レベル/ライン DOM更新"]
   S1 --> F1["フラッシュメッセージ\n(TETRIS! など)"]
-  F1 --> O1["オーバーレイ表示制御\n(idle/paused/over)"]
+  F1 --> O1{state?}
+  O1 -->|idle| O2["タイトル + キー一覧"]
+  O1 -->|paused| O3["PAUSED"]
+  O1 -->|over| O4["GAME OVER\n+ 名前入力フォーム表示"]
+  O1 -->|ranking| O5["ランキングテーブル表示"]
+  O1 -->|running| O6["overlay 非表示"]
     </div>
   </div>
   <table>
@@ -420,9 +450,88 @@ flowchart TD
   <p>ブロックサイズ <code>BS</code> はウィンドウリサイズ時に動的に再計算され、最大 30px・最小 14px に収まる。</p>
 </section>
 
-<!-- 10. Constants -->
+<!-- 10. Firestore -->
+<section id="firestore">
+  <h2>10. Firestore ランキング <span class="new-badge">NEW</span></h2>
+  <p>
+    ゲームオーバー時にスコアを Cloud Firestore へ保存し、上位 10 件のオンランキングを表示する。
+    Firebase compat SDK を CDN 経由で読み込むため、ビルドステップ不要。
+  </p>
+
+  <h3>データフロー</h3>
+  <div class="diagram">
+    <div class="mermaid">
+sequenceDiagram
+  participant Player
+  participant Game
+  participant DOM
+  participant SDK as Firestore SDK
+  participant FS as Cloud Firestore
+
+  Game->>Game: _spawn() → board invalid
+  Game->>Game: state = "over"
+  Game->>DOM: render() → 名前入力フォーム表示
+  DOM->>DOM: nameInput.focus()
+
+  Player->>DOM: 名前入力 → Enter / SAVE SCORE
+  DOM->>Game: game.state = "ranking"
+  DOM->>SDK: saveScore(name, score, level, lines)
+  SDK->>FS: scores.add({name, score, level, lines, date})
+  FS-->>SDK: ok
+  DOM->>SDK: loadRanking()
+  SDK->>FS: scores.orderBy("score","desc").limit(10)
+  FS-->>SDK: QuerySnapshot (10件)
+  SDK-->>DOM: rows[]
+  DOM->>DOM: ランキングテーブル描画
+
+  Player->>DOM: PLAY AGAIN / SPACE
+  DOM->>Game: new Game(), state = "running"
+    </div>
+  </div>
+
+  <h3>Firestore データ構造</h3>
+  <table>
+    <tr><th>コレクション</th><th>フィールド</th><th>型</th><th>説明</th></tr>
+    <tr><td rowspan="5"><code>scores</code></td><td><code>name</code></td><td>string</td><td>プレイヤー名（最大10文字、大文字変換）</td></tr>
+    <tr><td><code>score</code></td><td>number</td><td>最終スコア</td></tr>
+    <tr><td><code>level</code></td><td>number</td><td>到達レベル</td></tr>
+    <tr><td><code>lines</code></td><td>number</td><td>消去ライン数</td></tr>
+    <tr><td><code>date</code></td><td>Timestamp</td><td>サーバータイムスタンプ</td></tr>
+  </table>
+
+  <h3>セキュリティルール (<code>firestore.rules</code>)</h3>
+  <table>
+    <tr><th>操作</th><th>条件</th></tr>
+    <tr><td>read (全件取得・1件取得)</td><td>誰でも可</td></tr>
+    <tr><td>create (書き込み)</td><td><code>score</code> が number かつ <code>name</code> が string(≤10文字) のみ</td></tr>
+    <tr><td>update / delete</td><td>禁止（クライアントから変更・削除不可）</td></tr>
+  </table>
+
+  <h3>ランキング UI の状態遷移</h3>
+  <div class="diagram">
+    <div class="mermaid">
+flowchart LR
+  A["state=over\n名前入力フォーム表示"] -->|SAVE SCORE| B["saveScore()\n→ state=ranking"]
+  A -->|SKIP| C["state=ranking\n(保存なし)"]
+  B --> D["loadRanking()\nTop10表示"]
+  C --> D
+  D -->|PLAY AGAIN / SPACE| E["new Game()\nstate=running"]
+    </div>
+  </div>
+
+  <h3>エラーハンドリング</h3>
+  <table>
+    <tr><th>ケース</th><th>挙動</th></tr>
+    <tr><td>Firebase 初期化失敗</td><td><code>db = null</code> にフォールバック。ゲーム本体は継続動作</td></tr>
+    <tr><td>saveScore 失敗</td><td>エラーをキャッチし、保存なしでランキング取得へ進む</td></tr>
+    <tr><td>loadRanking 失敗</td><td>"Error loading ranking" メッセージをテーブルに表示</td></tr>
+    <tr><td>スコアが 0 件</td><td>"No scores yet" メッセージをテーブルに表示</td></tr>
+  </table>
+</section>
+
+<!-- 11. Constants -->
 <section id="constants">
-  <h2>10. 主要定数</h2>
+  <h2>11. 主要定数</h2>
   <table>
     <tr><th>定数</th><th>値</th><th>説明</th></tr>
     <tr><td><code>COLS</code></td><td>10</td><td>ボード列数</td></tr>
